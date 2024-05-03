@@ -1,0 +1,1 @@
+2024-05-03 16:17:57,589 FILE: database.py IN: count_all_limits MESSAGE: Error binding parameter 0 - probably unsupported type.
