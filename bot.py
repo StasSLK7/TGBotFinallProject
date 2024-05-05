@@ -10,6 +10,48 @@ from database import create_database, add_message, select_n_last_messages
 bot = telebot.TeleBot(TOKEN)
 
 
+@bot.message_handler(commands=['stt'])
+def stt_handler(message):
+    user_id = message.from_user.id
+    bot.send_message(user_id, 'Отправь голосовое сообщение, чтобы я его распознал!')
+    bot.register_next_step_handler(message, stt)
+
+
+def stt(message):
+    user_id = message.from_user.id
+
+    # Проверка, что сообщение действительно голосовое
+    if not message.voice:
+        bot.send_message(user_id, 'Ты по-моему перепутал. Я ожидаю голосовуху!')
+        bot.register_next_step_handler(message, stt)
+        return
+
+    # Проверка на доступность аудиоблоков
+    stt_blocks, error_message = is_stt_block_limit(user_id, message.voice.duration)  # !!!
+    if error_message:
+        bot.send_message(user_id, error_message)
+        return
+
+    # Обработка голосового сообщения
+    file_id = message.voice.file_id
+    file_info = bot.get_file(file_id)
+    file = bot.download_file(file_info.file_path)
+    status_stt, stt_text = speech_to_text(file)
+    if not status_stt:
+        bot.send_message(user_id, stt_text)
+        return
+
+    # Запись в БД
+    add_message(user_id=user_id,
+                full_message=[stt_text, 'check', 0, 0, stt_blocks]
+                )
+
+    bot.send_message(user_id,
+                     f'Прекрасно! Все получилось.\nРаспознанный текст : {stt_text}',
+                     reply_to_message_id=message.id
+                     )
+
+
 @bot.message_handler(content_types=['voice'])
 def handle_voice(message: telebot.types.Message):
     try:
@@ -80,7 +122,8 @@ def tts_handler(message):
     user_id = message.from_user.id
     bot.send_message(user_id, 'Я - бот-gpt, голосовой помощник\n'
                               'Выполни комманду /tts для того, чтобы озвучить текст.\n'
-                              'Выполнит команду /stt для того, чтобы отправить аудио и преобразовать его в текст\n'
+                              'Выполни команду /stt для того, чтобы отправить аудио и преобразовать его в текст\n'
+                              "Выполни /debug для отладочного режима\n"
                               'Или напиши свой вопрос или задай его в голосовом сообщении'
                      )
 
@@ -90,6 +133,17 @@ def tts_handler(message):
     user_id = message.from_user.id
     bot.send_message(user_id, 'Отправь следующим сообщеним текст, чтобы я его озвучил!')
     bot.register_next_step_handler(message, tts)
+
+
+@bot.message_handler(commands=['debug'])
+def send_debug(message):
+    user_id = message.from_user.id
+    with open("logs.txt", "rb") as f:
+        first_char = f.read(1)
+        if not first_char:
+            bot.send_message(user_id, "Файл пока пуст")
+        else:
+            bot.send_document(user_id, f)
 
 
 def tts(message):
