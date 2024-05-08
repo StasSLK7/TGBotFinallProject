@@ -18,38 +18,42 @@ def stt_handler(message):
 
 
 def stt(message):
-    user_id = message.from_user.id
+    try:
+        user_id = message.from_user.id
 
-    # Проверка, что сообщение действительно голосовое
-    if not message.voice:
-        bot.send_message(user_id, 'Ты по-моему перепутал. Я ожидаю голосовуху!')
-        bot.register_next_step_handler(message, stt)
-        return
+        # Проверка, что сообщение действительно голосовое
+        if not message.voice:
+            bot.send_message(user_id, 'Ты по-моему перепутал. Я ожидаю голосовуху!')
+            bot.register_next_step_handler(message, stt)
+            return
 
-    # Проверка на доступность аудиоблоков
-    stt_blocks, error_message = is_stt_block_limit(user_id, message.voice.duration)  # !!!
-    if error_message:
-        bot.send_message(user_id, error_message)
-        return
+        # Проверка на доступность аудиоблоков
+        stt_blocks, error_message = is_stt_block_limit(user_id, message.voice.duration)  # !!!
+        if error_message:
+            bot.send_message(user_id, error_message)
+            return
 
-    # Обработка голосового сообщения
-    file_id = message.voice.file_id
-    file_info = bot.get_file(file_id)
-    file = bot.download_file(file_info.file_path)
-    status_stt, stt_text = speech_to_text(file)
-    if not status_stt:
-        bot.send_message(user_id, stt_text)
-        return
+        # Обработка голосового сообщения
+        file_id = message.voice.file_id
+        file_info = bot.get_file(file_id)
+        file = bot.download_file(file_info.file_path)
+        status_stt, stt_text = speech_to_text(file)
+        if not status_stt:
+            bot.send_message(user_id, stt_text)
+            return
 
-    # Запись в БД
-    add_message(user_id=user_id,
-                full_message=[stt_text, 'check', 0, 0, stt_blocks]
-                )
+        # Запись в БД
+        add_message(user_id=user_id,
+                    full_message=[stt_text, 'check', 0, 0, stt_blocks]
+                    )
 
-    bot.send_message(user_id,
-                     f'Прекрасно! Все получилось.\nРаспознанный текст : {stt_text}',
-                     reply_to_message_id=message.id
-                     )
+        bot.send_message(user_id,
+                         f'Прекрасно! Все получилось.\nРаспознанный текст : {stt_text}',
+                         reply_to_message_id=message.id
+                         )
+    except Exception as e:
+        logging.error(e)
+        bot.send_message(user_id, "Не получилось ответить. Попробуй записать другое сообщение")
 
 
 @bot.message_handler(content_types=['voice'])
@@ -118,7 +122,7 @@ def handle_voice(message: telebot.types.Message):
 
 
 @bot.message_handler(commands=['start'])
-def tts_handler(message):
+def start_handler(message):
     user_id = message.from_user.id
     bot.send_message(user_id, 'Я - бот-gpt, голосовой помощник\n'
                               'Выполни комманду /tts для того, чтобы озвучить текст.\n'
@@ -147,33 +151,38 @@ def send_debug(message):
 
 
 def tts(message):
-    user_id = message.from_user.id
-    text = message.text
-    # Проверка, что сообщение действительно текстовое
-    if message.content_type != 'text':
-        bot.send_message(user_id, 'Отправь текстовое сообщение')
-        return
-
-    # Считаем символы в тексте и проверяем сумму потраченных символов
-    text_symbol = is_tts_symbol_limit(message, text)
-    tts_symbols, error_message = is_tts_symbol_limit(user_id, text)
-    if error_message:
-        bot.send_message(user_id, error_message)
-        return
-
-    add_message(user_id=user_id, full_message=[text, 'check', 0, tts_symbols, 0])
-
-    # Получаем статус и содержимое ответа от SpeechKit
-    status, content = text_to_speech(text)
-
-    # Если статус True - отправляем голосовое сообщение, иначе - сообщение об ошибке
     try:
-        if status:
-            bot.send_voice(user_id, content, reply_to_message_id=message.id)
-        else:
-            bot.send_message(user_id, content, reply_to_message_id=message.id)
-    except:
-        bot.send_message(user_id, "Что-то пошло не так. Возможно, ты запретил отправлять аудио")
+        user_id = message.from_user.id
+        text = message.text
+        # Проверка, что сообщение действительно текстовое
+        if message.content_type != 'text':
+            bot.send_message(user_id, 'Отправь текстовое сообщение')
+            return
+
+        # Считаем символы в тексте и проверяем сумму потраченных символов
+        text_symbol = is_tts_symbol_limit(message, text)
+        tts_symbols, error_message = is_tts_symbol_limit(user_id, text)
+        if error_message:
+            bot.send_message(user_id, error_message)
+            return
+
+        add_message(user_id=user_id, full_message=[text, 'check', 0, tts_symbols, 0])
+
+        # Получаем статус и содержимое ответа от SpeechKit
+        status, content = text_to_speech(text)
+
+        # Если статус True - отправляем голосовое сообщение, иначе - сообщение об ошибке
+        try:
+            if status:
+                bot.send_voice(user_id, content, reply_to_message_id=message.id)
+            else:
+                bot.send_message(user_id, content, reply_to_message_id=message.id)
+        except Exception as e:
+            logging.error(e)
+            bot.send_message(user_id, "Что-то пошло не так. Возможно, ты запретил отправлять аудио")
+    except Exception as e:
+        logging.error(e)
+        bot.send_message(user_id, "Не получилось ответить. Попробуй записать другое сообщение")
 
 
 # обрабатываем текстовые сообщения
